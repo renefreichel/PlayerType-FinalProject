@@ -21,7 +21,7 @@ devtools::install_github("Oefenweb/r-tools")
 
 ```
 
-# 1. Grade and Chosen Difficulty
+# Loading the data
 ```{r setup, include=FALSE}
 
 # Load the data
@@ -46,8 +46,12 @@ data_all <- data_time %>%
   mutate(difficulty_summarized = max(difficulty),
             response_time_summarized = mean(response_in_milliseconds) / 1000)
 View(data_all)
+```
 
 
+
+# 1. NEW: Grade, Chosen Difficulty and RT
+```{r setup, include=FALSE}
 # examine grade differences in RT
 plot_grade_rt <- data_all %>% ggplot(aes(y = response_time_summarized,
                                  x = factor(grade), color =factor(difficulty_summarized))) +
@@ -69,7 +73,6 @@ plot(plot_grade_rt)
 
 ## Our Previous Plot: RT - Difficulty
 ```{r}
-
 # Create plot
 plot1 <- data_all %>% ggplot(aes(y = response_time_summarized,
                                  x = factor(difficulty_summarized))) +
