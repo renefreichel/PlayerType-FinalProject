@@ -1,7 +1,5 @@
 ---
-title: "Final Project Code"
-author: "René Freichel"
-date: "10/6/2020"
+title: "Final Project"
 output: html_document
 ---
 
@@ -9,4 +7,100 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Final Project Code
+First clear the environment, import packages, make a connection to the server, and run the lintr code
+```{r preparations}
+rm(list = ls())
+
+library(tidyverse)
+
+suppressMessages(library("dplyr"))
+
+devtools::install_github(repo = "Oefenweb/r-database")
+con <- oefenwebDatabase::connect()
+devtools::install_github("Oefenweb/r-tools")
+
+```
+
+# 1. Grade and Chosen Difficulty
+```{r setup, include=FALSE}
+
+# Load the data
+data_time <- suppressWarnings(DBI::dbGetQuery(con,
+                                              "SELECT difficulty,
+                                                      response_in_milliseconds,
+                                                      new_user_id, score
+                                               FROM log_records_1"))
+
+data_users <- suppressWarnings(DBI::dbGetQuery(con,
+                                               "SELECT id, gender, grade
+                                            FROM users"))
+
+# Rename the id column from the data_users data frame
+data_users <- data_users %>%
+  rename(new_user_id = id)
+
+# Create the data frame
+data_all <- data_time %>%
+  left_join(data_users) %>%
+  group_by(new_user_id) %>%
+  mutate(difficulty_summarized = max(difficulty),
+            response_time_summarized = mean(response_in_milliseconds) / 1000)
+View(data_all)
+
+
+# examine grade differences in RT
+plot_grade_rt <- data_all %>% ggplot(aes(y = response_time_summarized,
+                                 x = factor(grade), color =factor(difficulty_summarized))) +
+  #geom_violin(fill = "lightblue") +
+  stat_summary(fun.y = mean, geom = "point", shape = 23, size = 2) +
+  #geom_boxplot(width = 0.1, outlier.shape = NA) +
+  geom_point() +
+  labs(x = "Grade",
+       y = "Response time (seconds)",
+       title = "Average Response Time for the Chosen Difficulty Level", caption = "Outliers have been removed.") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+plot(plot_grade_rt)
+
+```
+
+
+## Our Previous Plot: RT - Difficulty
+```{r}
+
+# Create plot
+plot1 <- data_all %>% ggplot(aes(y = response_time_summarized,
+                                 x = factor(difficulty_summarized))) +
+  geom_violin(fill = "lightblue") +
+  stat_summary(fun.y = mean, geom = "point", shape = 23, size = 2) +
+  geom_boxplot(width = 0.1, outlier.shape = NA) +
+  labs(x = "Chosen Difficulty",
+       y = "Response time (seconds)",
+       title = "Average Response Time for the Chosen Difficulty Level", caption = "Outliers have been removed.") +
+  theme_minimal() +
+  scale_x_discrete(labels =
+                     c(paste0("Low \n n = ",
+                              sum(data_all$difficulty_summarized == 0)),
+                       paste0("Medium \n n = ",
+                              sum(data_all$difficulty_summarized == 1)),
+                       paste0("High \n n = ",
+                              sum(data_all$difficulty_summarized == 2)))) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+Description of the plot:
+As can be seen from the outlier-removed plot, there seems to be a relationship between the chosen difficulty level and rwaction time. On average students with a low chosen difficulty level respond more faster than those with a high chosen difficulty. 
+
+We removed outliers for two reasons: First, it allows us a better visiual inspection and second, extremely short or long response times may reflect "blind guesses" or signs of distraction on the side of the students. Such effects may distort our analyses. 
+
+Why did we choose to visualize this type of data?
+We chose to examine the relationship between chosen difficulty level and reaction time based upon a long history of psychological research that determined a negative relationship (e.g. Mason & Zollman, 1992). A possible mechanism may lie in the underlying cognitive processes required to give a response. Thus, we believe that reaction time and chosen difficulty level may characterize different player types. 
+
+
+
+
+
+
