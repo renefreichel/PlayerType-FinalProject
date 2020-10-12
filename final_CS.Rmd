@@ -1,0 +1,75 @@
+---
+title: "DV-3_CS-part1"
+author: "Carolin Streitberger"
+date: "2-10-2020"
+output: html_document
+---
+# Preparations
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+First clear the environment, import packages, make a connection to the server, and run the lintr code
+```{r preparations}
+rm(list = ls())
+
+library(cowplot)
+library(tidyverse)
+library(plotly)
+
+suppressMessages(library("dplyr"))
+
+devtools::install_github(repo = "Oefenweb/r-database")
+con <- oefenwebDatabase::connect()
+
+devtools::install_github("Oefenweb/r-tools")
+#oefenwebTools::lintrProfile(rstudioapi::getSourceEditorContext()$path)
+```
+# Plot 1
+```{r plot 1}
+theme_here <-
+  theme(panel.background = element_blank(),
+        panel.grid = element_line(colour = "lightgray",
+                                  size = .2))
+
+colors_here <- c("#f1a340", "#f7f7f7", "#998ec3") # these colors are colorblind safe, print friendly, and photocopy safe
+
+data_log1 <- suppressWarnings(DBI::dbGetQuery(con,
+                                              "SELECT difficulty,
+                                                      new_user_id,
+                                                      new_user_domain_q_score
+                                               FROM log_records_1"))
+
+data_users <- suppressWarnings(DBI::dbGetQuery(con,
+                                               "SELECT id, grade
+                                            FROM users"))
+
+getmode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# Create the data frame
+data_all <- data_log1 %>%
+  left_join(data_users, by = c("new_user_id" = "id")) %>%
+  filter(grade %in% c(2, 3, 4)) %>%
+  group_by(new_user_id) %>%
+  summarise(difficulty_summarized = getmode(difficulty),
+            new_user_domain_q_score_summarized = mean(new_user_domain_q_score),
+            grade = mean(grade))
+  
+data_all %>%
+  ggplot(aes(x = factor(grade),
+             y = new_user_domain_q_score_summarized,
+             fill = factor(difficulty_summarized, levels = c("0", "1", "2"), labels = c("Low", "Medium", "High")))) +
+  geom_violin() +
+  facet_wrap(~ factor(grade), scales = "free") +
+
+  theme_here +
+  scale_fill_manual(values = colors_here) +
+  labs(title = "Q-score by grade and chosen difficulty level",
+       x = "Grade",
+       y = "Q-score",
+       fill = "Chosen difficulty level",
+       caption = "Note: the y-axes are free") +
+  scale_y_continuous(breaks = seq(0, 600, by = 100))
+```
