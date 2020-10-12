@@ -1,0 +1,83 @@
+---
+title: "Final project"
+author: "Nina Temme"
+date: "12-10-2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+suppressMessages(library("dplyr"))
+devtools::install_github(repo = "Oefenweb/r-database")
+con <- oefenwebDatabase::connect()
+devtools::install_github("Oefenweb/r-tools")
+```
+
+```{r}
+logincount <- suppressWarnings(DBI::dbGetQuery(con,
+                                               "SELECT id, role_id, login_count, grade
+                                               FROM users"))
+
+difficulty <- suppressWarnings(DBI::dbGetQuery(con, 
+                                               "SELECT difficulty, new_user_id
+                                               FROM log_records_1"))
+
+
+theme_here <-
+  theme(panel.background = element_blank(),
+        panel.grid = element_line(colour = "lightgray",
+                                  size = .2))
+colors_here <- c("#f1a340", "#f7f7f7", "#998ec3") # these colors are colorblind safe, print friendly, and photocopy safe
+# Import function
+getmode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+difficulty <- difficulty %>% 
+                group_by(new_user_id) %>% 
+                summarise(difficulty_summarized = getmode(difficulty))
+                          
+logincount <- logincount %>% 
+                filter(role_id == 1) %>% 
+                group_by(id) %>% 
+                distinct(id, login_count, grade)
+
+data <- difficulty %>% 
+          left_join(logincount, by = c("new_user_id"= "id"))
+      
+          
+data <- data %>% 
+          filter(grade %in% c(2,3,4)) %>% 
+          distinct(new_user_id,
+                   difficulty_summarized,
+                   login_count,
+                   grade)
+plot <- data %>% 
+  ggplot(aes(x = factor(grade),
+             y = login_count,
+             fill = factor(difficulty_summarized, levels = c("0", "1", "2"), labels = c("Low", "Medium", "High")))) +
+  geom_violin() +
+  facet_wrap(~factor(grade), scales = "free") +
+  theme_here +
+  scale_fill_manual(values = colors_here) +
+  labs(title = "Login count and chosen difficulty",
+        x = "Grade",
+        y = "Login count",
+        fill = "Chosen difficulty level")
+  
+
+
+
+
+
+
+```
+
+
+
