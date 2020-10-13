@@ -212,7 +212,7 @@ draw_label_theme <- function(label, theme = NULL, element = "text", ...) {
 title <- ggdraw() +
   draw_label_theme("Chosen Difficulty by Grade in the Addition Game",
                    element = "plot.title",
-                   x = 0.25, hjust = 0, vjust = 1)
+                   x = 0.3, hjust = 0, vjust = 1)
 
 # Merge the plots, legend, and title
 plot_grid(title, plots_legend,
