@@ -1,0 +1,282 @@
+---
+title: "Final Project"
+author: "Nina Temme"
+date: "14-10-2020"
+output: html_document
+---
+
+# Preparations
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First clear the environment, import packages, make a connection to the server, and run the lintr code
+```{r preparations}
+rm(list = ls())
+
+library(cowplot)
+library(tidyverse)
+library(plotly)
+
+suppressMessages(library("dplyr"))
+
+devtools::install_github(repo = "Oefenweb/r-database")
+con <- oefenwebDatabase::connect()
+
+devtools::install_github("Oefenweb/r-tools")
+#oefenwebTools::lintrProfile(rstudioapi::getSourceEditorContext()$path)
+```
+
+Then set some settings for the plots
+```{r settings}
+# Set the theme and colors
+theme_here <-
+  theme(panel.background = element_blank(),
+        panel.grid = element_line(colour = "lightgray", size = .2),
+        strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        strip.text.x = element_blank(),
+        plot.subtitle = element_text(size = 8, face = "italic", hjust = 0.5))
+
+colors_here <- c("#f1a340", "#f7f7f7", "#998ec3") # these colors are colorblind safe, print friendly, and photocopy safe
+```
+
+Lastly, prepare the functions that will be used later
+```{r functions}
+getmode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+```
+
+# Data
+Load the data that will be used in all three plots
+```{r}
+data_log1 <- suppressWarnings(DBI::dbGetQuery(con,
+                                              "SELECT difficulty,
+                                                      new_user_id,
+                                                      new_user_domain_q_score
+                                               FROM log_records_1"))
+
+data_users <- suppressWarnings(DBI::dbGetQuery(con,
+                                               "SELECT id,
+                                                       grade,
+                                                       login_count
+                                                FROM users"))
+```
+
+# Plot 1
+```{r plot 1}
+# Create the data frame for plot 1
+data_plot1 <- data_log1 %>%
+  left_join(data_users, by = c("new_user_id" = "id")) %>%
+  select(difficulty, new_user_id, grade) %>% # only select the relevant columns
+  filter(grade %in% c(2, 3, 4)) %>% # only select the grades we need
+  group_by(new_user_id) %>%
+  mutate(difficulty_summarized = getmode(difficulty)) %>% # extract the most frequently chosen difficulty
+  group_by(grade, difficulty_summarized) %>%
+  summarise(relative = n()) %>% # extract the number of chosen difficulty level per grade
+  group_by(grade) %>%
+  mutate(total = sum(relative), # extract the total number of player per grade
+         proportion = relative / total) # calculate the proportion of each difficulty level
+
+plot1 <- data_plot1 %>%
+  ggplot(aes(x = factor(grade),
+             y = proportion,
+             fill = factor(difficulty_summarized,
+                           levels = c("0", "1", "2"),
+                           labels = c("Low Difficulty", "Medium Difficulty", "High Difficulty")))) +
+  geom_col() +
+  labs(x = "", # hide the x axis label because the factor-labels are self-explanatory
+       y = "Proportion",
+       fill = "Difficulty") +
+  theme_here +
+  scale_fill_manual(values = colors_here) +
+  scale_x_discrete(labels =
+                     c(paste0("Grade 2 \n n = ",
+                              data_plot1$total[1]),
+                       paste0("Grade 3 \n n = ",
+                              data_plot1$total[4]),
+                       paste0("Grade 4 \n n = ",
+                              data_plot1$total[7]))) +
+  annotate(geom = "text", x = 1, y = 0.67, size = 3,
+           label = "the medium level") +
+  annotate(geom = "text", x = 1, y = 0.62, size = 3,
+           label = paste0(round(data_plot1$proportion
+                                [data_plot1$grade == 2 &
+                                 data_plot1$difficulty_summarized == 1] * 100),
+                                 "% chose")) +
+  annotate(geom = "text", x = 2, y = 0.59, size = 3,
+           label = "the medium level") +
+  annotate(geom = "text", x = 2, y = 0.54, size = 3,
+           label = paste0(round(data_plot1$proportion
+                                [data_plot1$grade == 3 &
+                                 data_plot1$difficulty_summarized == 1] * 100),
+                                 "% chose")) +
+  annotate(geom = "text", x = 3, y = 0.53, size = 3,
+           label = "the medium level") +
+  annotate(geom = "text", x = 3, y = 0.48, size = 3,
+           label = paste0(round(data_plot1$proportion
+                                [data_plot1$grade == 4 &
+                                 data_plot1$difficulty_summarized == 1] * 100),
+                                 "% chose")) +
+  scale_y_reverse(breaks = c(1.0, 0.75, 0.5, 0.25, 0.0), labels = c(0.0, 0.25, 0.5, 0.75, 1.0))
+```
+
+# Plot 2
+```{r plot 2}
+# Create the data frame for plot 2
+data_plot2 <- data_log1 %>%
+  left_join(data_users, by = c("new_user_id" = "id")) %>%
+  select(difficulty, new_user_id, new_user_domain_q_score, grade) %>% # only select the relevant columns
+  filter(grade %in% c(2, 3, 4)) %>% # only select the grades we need
+  group_by(new_user_id) %>%
+  summarise(difficulty_summarized = getmode(difficulty), # extract the most frequently chosen difficulty
+            q_score_summarized = mean(new_user_domain_q_score), # extract the mean q score
+            grade = mean(grade)) # take the mean because otherwise we lose this information
+
+# Create personalized breaks for the y-axis to avoid overcrowding
+breaks_plot2 <- function(x) {
+  if (max(x) < 300) {
+    c(0, 100, 200)
+  } else if (max(x) < 600) {
+    c(0, 200, 300)
+  } else {
+    c(0, 300, 400)
+  }
+}
+
+# Create a data frame with labels for each facet, to indicate the expected q-score
+expected_q <- data.frame(grade = c("2", "2", "3", "3", "4", "4"),
+                         score = c(100, 200, 200, 300, 300, 400))
+# Plot
+plot2 <- data_plot2 %>%
+  ggplot(aes(x = factor(grade),
+             y = q_score_summarized,
+             fill = factor(difficulty_summarized,
+                           levels = c("0", "1", "2"),
+                           labels = c("Low Difficulty", "Medium Difficulty", "High Difficulty")))) +
+  geom_violin() +
+  facet_wrap(~ factor(grade), scales = "free") +
+  labs(x = "", # hide the x axis label because it is visible in the third plot
+       y = "Q-score",
+       fill = "Difficulty",
+       subtitle = "Note that the y axes are free here. And that the dotted lines represented the expected q-score.") +
+  theme_here +
+  scale_fill_manual(values = colors_here) +
+  scale_y_continuous(breaks = breaks_plot2) +
+  geom_hline(data = expected_q, aes(yintercept = score), linetype = 2, size = 0.2)
+```
+
+
+# Plot 3
+``` {r plot 3}
+data_plot3 <- data_log1 %>%
+  left_join(data_users, by = c("new_user_id" = "id")) %>%
+  select(difficulty, new_user_id, grade, login_count) %>% # only select the relevant columns
+  filter(grade %in% c(2, 3, 4)) %>% # only select the grades we need
+  group_by(new_user_id) %>%
+  mutate(difficulty_summarized = getmode(difficulty)) %>%
+  distinct(new_user_id, # explanation needed
+           difficulty_summarized,
+           login_count,
+           grade)
+
+# Plot
+plot3 <- data_plot3 %>%
+  ggplot(aes(x = factor(grade),
+             y = login_count,
+             fill = factor(difficulty_summarized,
+                           levels = c("0", "1", "2"),
+                           labels = c("Low Difficulty", "Medium Difficulty", "High Difficulty")))) +
+  # geom_violin() +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(~ factor(grade), scales = "free") +
+  labs(x = "Grade",
+       y = "Login Count",
+       fill = "Difficulty",
+       subtitle = "Note that outliers were removed here.") +
+  theme_here +
+  scale_fill_manual(values = colors_here) +
+  scale_y_continuous(limits = c(0, 400))
+```
+
+# Merge the plots
+```{r}
+# First merge the three plots into one
+plots <- plot_grid(plot1 + theme(legend.position = "none"), # "none", because we add it manually
+                   plot_grid(plot2 + theme(legend.position = "none"),
+                             plot3 + theme(legend.position = "none"),
+                             nrow = 2,
+                             labels = c("B", "C"), label_size = 12, label_x = 0, label_y = 0, hjust = -1, vjust = -2),
+                   nrow = 1,
+                   labels = c("A", " "), label_size = 12, label_x = 0, label_y = 0, hjust = -1, vjust = -2)
+
+# Make a separate legend
+legend <- get_legend(plot2 +
+                       guides(color = guide_legend(nrow = 1)) +
+                       theme(legend.position = "bottom",
+                             legend.title = element_blank(),
+                             legend.spacing.x = unit(0.7, "cm"),
+                             legend.key = element_rect(colour = "black"))) # to make the legend nicer
+
+# Merge the plots and the legend
+plots_legend <- plot_grid(plots, legend,
+                          nrow = 2,
+                          rel_heights = c(1, 0.1)) # to make the legend smaller than the rest
+
+# Create a function to draw a label, or more specifically a title
+draw_label_theme <- function(label, theme = NULL, element = "text", ...) {
+  if (is.null(theme)) {
+    theme <- ggplot2::theme_get()
+  }
+  if (!element %in% names(theme)) {
+    stop("Element must be a valid ggplot theme element name")
+  }
+
+  elements <- ggplot2::calc_element(element, theme)
+
+  cowplot::draw_label(label,
+                      fontfamily = elements$family,
+                      fontface = elements$face,
+                      colour = elements$color,
+                      size = elements$size,
+                      ...
+  )
+}
+
+# Create a title
+title <- ggdraw() +
+  draw_label_theme("Chosen Difficulty by Grade in the Addition Game",
+                   element = "plot.title",
+                   x = 0.3, hjust = 0, vjust = 1)
+
+
+
+# Merge the plots, legend, and title
+plot_grid(title, plots_legend,
+          nrow = 2,
+          rel_heights = c(0.1, 1)) # to make the title smaller than the rest
+```
+
+```{r}
+data_model <- data_log1 %>%
+  left_join(data_users, by = c("new_user_id" = "id")) %>%
+  filter(grade %in% c(2, 3, 4)) %>% # only select the grades we need
+  group_by(new_user_id) %>%
+  summarise(difficulty_summarized = getmode(difficulty),
+            q_score_summarized = mean(new_user_domain_q_score), # extract the mean q score
+            grade = mean(grade),
+            login_count = mean(login_count))
+
+model_q_score <- lm(q_score_summarized ~ difficulty_summarized * grade, data = data_model)
+summary(model_q_score)
+# only grade is a significant predictor, not their chosen difficulty level
+
+model_login <- lm(login_count ~ difficulty_summarized * grade, data = data_model)
+summary(model_login)
+# same
+
+model_nina <- lm(difficulty_summarized ~ login_count * grade, data = data_model)
+summary(model_login)
+```
