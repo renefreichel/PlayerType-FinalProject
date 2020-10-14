@@ -60,7 +60,6 @@ data_log1 <- suppressWarnings(DBI::dbGetQuery(con,
 data_users <- suppressWarnings(DBI::dbGetQuery(con,
                                                "SELECT id,
                                                grade,
-                                               role_id,
                                                login_count
                                                FROM users"))
 ```
@@ -220,3 +219,22 @@ plot_grid(title, plots_legend,
           rel_heights = c(0.1, 1)) # to make the title smaller than the rest
 ```
 
+# Some models
+``` {r modelling}
+data_model <- data_log1 %>%
+  left_join(data_users, by = c("new_user_id" = "id")) %>%
+  filter(grade %in% c(2, 3, 4)) %>% # only select the grades we need
+  group_by(new_user_id) %>%
+  summarise(difficulty_summarized = getmode(difficulty),
+            q_score_summarized = mean(new_user_domain_q_score), # extract the mean q score
+            grade = mean(grade),
+            login_count = mean(login_count))
+
+model_q_score <- lm(q_score_summarized ~ difficulty_summarized * grade, data = data_model)
+summary(model_q_score)
+# only grade is a significant predictor, not their chosen difficulty level
+
+model_login <- lm(login_count ~ difficulty_summarized * grade, data = data_model)
+summary(model_login)
+# same
+```
