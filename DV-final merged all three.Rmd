@@ -273,4 +273,16 @@ summary(lm.beta(model_login_grade))
 
 model_diff<- lm(difficulty_summarized ~ login_count * grade, data = data_model)
 summary(model_diff)
+summary(lm.beta(model_diff))
+
+model_login_only <- lm(login_count ~ difficulty_summarized, data = data_model)
+summary(model_login_only)
+summary(lm.beta(model_login_only))
+
+model_diff_only <- lm(q_score_summarized ~ difficulty_summarized, data = data_model)
+summary(model_diff_only)
+summary(lm.beta(model_diff_only))
+
+
+
 ```
