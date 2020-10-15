@@ -16,6 +16,7 @@ rm(list = ls())
 library(cowplot)
 library(tidyverse)
 library(plotly)
+library(lm.beta)
 
 suppressMessages(library("dplyr"))
 
@@ -252,6 +253,7 @@ plot_grid(title, plots_legend,
           rel_heights = c(0.1, 1)) # to make the title smaller than the rest
 ```
 
+# Statistical Models 
 ```{r}
 data_model <- data_log1 %>%
   left_join(data_users, by = c("new_user_id" = "id")) %>%
@@ -263,13 +265,12 @@ data_model <- data_log1 %>%
             login_count = mean(login_count))
 
 model_q_score <- lm(q_score_summarized ~ difficulty_summarized * grade, data = data_model)
-summary(model_q_score)
-# only grade is a significant predictor, not their chosen difficulty level
+summary(model_q_score) # only grade is a significant predictor, not their chosen difficulty level
 
-model_login <- lm(login_count ~ difficulty_summarized * grade, data = data_model)
-summary(model_login)
-# same
+model_login_grade <- lm(login_count ~ difficulty_summarized * grade, data = data_model)
+summary(model_login_grade)
+summary(lm.beta(model_login_grade))
 
-model_nina <- lm(difficulty_summarized ~ login_count * grade, data = data_model)
-summary(model_login)
+model_diff<- lm(difficulty_summarized ~ login_count * grade, data = data_model)
+summary(model_diff)
 ```
